@@ -2,115 +2,128 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <title>台鐵縱向時刻表 - 田中 0-24 修正版</title>
+    <title>台鐵時刻表轉換器 - 基準站自定義版</title>
     <style>
         :root { --tra-blue: #003366; --tra-red: #d32f2f; }
-        body { font-family: "Microsoft JhengHei", sans-serif; background: #f0f4f8; padding: 20px; }
-        .container { max-width: 100%; background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); }
+        body { font-family: "Microsoft JhengHei", sans-serif; background: #f4f7f9; padding: 20px; }
+        .container { max-width: 100%; margin: auto; background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); }
         h1 { color: var(--tra-blue); text-align: center; border-bottom: 3px solid var(--tra-blue); padding-bottom: 10px; }
         .config-box { background: #eef2f7; padding: 20px; border-radius: 10px; margin-bottom: 25px; border: 1px solid #d1d9e6; }
         .row { display: flex; gap: 10px; align-items: center; margin-bottom: 15px; flex-wrap: wrap; }
+        .label { font-weight: bold; color: var(--tra-blue); min-width: 110px; }
         input[type="text"], input[type="file"] { padding: 12px; border: 1px solid #ccc; border-radius: 8px; flex: 1; font-size: 16px; }
-        button { padding: 12px 25px; background: var(--tra-blue); color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; }
-        .btn-sort { background: #607d8b; }
+        .sort-target { max-width: 150px; background: #fffbe6; border: 2px solid #ffe58f !important; font-weight: bold; }
+        button { padding: 12px 20px; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; transition: 0.3s; }
+        .btn-run { background: var(--tra-blue); color: white; }
+        .btn-sort { background: #607d8b; color: white; }
+        #status { font-weight: bold; margin-bottom: 10px; color: #666; }
         .table-wrap { overflow-x: auto; margin-top: 10px; }
         table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 1400px; }
         th { background: var(--tra-blue); color: white; padding: 12px 5px; border: 1px solid #ddd; white-space: nowrap; position: sticky; top: 0; }
         td { padding: 10px 5px; border: 1px solid #ddd; text-align: center; }
         tr:nth-child(even) { background: #f9f9f9; }
         tr:hover { background: #fff9c4; }
-        .time-dep { color: var(--tra-red); font-weight: bold; font-family: 'Consolas', monospace; font-size: 1.1em; }
+        .time-dep { color: var(--tra-red); font-weight: bold; font-family: 'Consolas', monospace; font-size: 1.2em; }
         .stn-header { background: #d9e2ec !important; color: var(--tra-blue) !important; font-weight: bold; }
-        #status { font-weight: bold; margin: 10px 0; color: #d32f2f; }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>🚂 台鐵全日時刻表 (00-24 嚴格排序版)</h1>
+        <h1>🚂 台鐵時刻表轉換器</h1>
         <div class="config-box">
             <div class="row">
-                <strong>1. 載入 JSON</strong>
+                <span class="label">1. 時刻表 JSON:</span>
                 <input type="file" id="jsonFile" accept=".json">
             </div>
-            <div id="status">❌ 尚未讀取檔案</div>
+            <div id="status">💡 狀態：請載入檔案</div>
             <div class="row">
-                <strong>2. 車站列表</strong>
-                <input type="text" id="stnInput" value="田中, 彰化, 台中, 台北" placeholder="第一個站將作為時間排序基準">
-                <button class="btn-sort" onclick="sortStations(false)">北往南排序</button>
-                <button class="btn-sort" onclick="sortStations(true)">南往北排序</button>
-                <button onclick="convert()">⚡ 執行轉換</button>
+                <span class="label">2. 主要排序站:</span>
+                <input type="text" id="sortStation" class="sort-target" value="高雄" placeholder="以此站時間排序">
+                <span style="font-size: 13px; color: #666;">(以此站 00-24 小時順序排列)</span>
+            </div>
+            <div class="row">
+                <span class="label">3. 顯示車站:</span>
+                <input type="text" id="stnInput" value="高雄, 斗六, 二水, 田中, 彰化, 台中, 台北" placeholder="請用逗號隔開">
+                <button class="btn-sort" onclick="sortStations(false)">北往南排站</button>
+                <button class="btn-sort" onclick="sortStations(true)">南往北排站</button>
+                <button class="btn-run" onclick="convert()">⚡ 執行轉換</button>
             </div>
         </div>
         <div id="output" class="table-wrap"></div>
     </div>
 
     <script>
-        const MASTER_ORDER = ["基隆","七堵","松山","台北","板橋","桃園","中壢","新竹","竹南","苗栗","豐原","台中","彰化","員林","田中","二水","斗六","嘉義","新營","台南","新左營","高雄","屏東","潮州"];
-        const STN_DB = {"基隆":"0900","七堵":"0930","松山":"0990","台北":"1000","板橋":"1020","桃園":"1040","中壢":"1060","新竹":"1080","竹南":"1250","苗栗":"1300","豐原":"3220","台中":"3300","彰化":"3360","員林":"3390","田中":"3430","二水":"3450","斗六":"3470","嘉義":"4080","新營":"4220","台南":"4400","新左營":"4610","高雄":"4400","屏東":"5000","潮州":"5050"};
+        const STN_DB = {"基隆":"0900","七堵":"0930","松山":"0990","台北":"1000","板橋":"1020","桃園":"1040","中壢":"1060","新竹":"1080","竹南":"1250","苗栗":"1300","豐原":"3220","台中":"3300","彰化":"3360","員林":"3390","田中":"3430","二水":"3450","斗六":"3470","嘉義":"4080","台南":"4400","新左營":"4610","高雄":"4400","屏東":"5000","潮州":"5050"};
+        const MASTER_ORDER = ["基隆","七堵","松山","台北","板橋","桃園","中壢","新竹","竹南","苗栗","豐原","台中","彰化","員林","田中","二水","斗六","嘉義","台南","新左營","高雄","屏東","潮州"];
         const CODE_TO_NAME = Object.fromEntries(Object.entries(STN_DB).map(([k, v]) => [v, k]));
         const CAR_MAP = {"110G":"自強(3000)","1101":"太魯閣","1102":"普悠瑪","1131":"區間車","1132":"區間快","1110":"莒光號","1103":"自強號"};
         const LINE_MAP = {"0":"","1":"山","2":"海","3":"成追"};
 
         let trainData = null;
 
-        document.getElementById('jsonFile').onchange = function(e) {
+        document.getElementById('jsonFile').onchange = e => {
             const file = e.target.files[0];
-            if (!file) return;
             const reader = new FileReader();
-            reader.onload = function(ev) {
+            reader.onload = ev => {
                 try {
                     trainData = JSON.parse(ev.target.result);
-                    document.getElementById('status').innerText = "✅ 檔案已就緒";
+                    document.getElementById('status').innerText = "✅ 檔案載入成功";
                     document.getElementById('status').style.color = "green";
                 } catch(err) {
-                    document.getElementById('status').innerText = "❌ JSON 格式錯誤";
+                    alert("JSON 解析失敗");
                 }
             };
             reader.readAsText(file);
         };
 
-        function sortStations(reverse) {
-            const input = document.getElementById('stnInput');
-            let names = input.value.split(',').map(s => s.trim().replace('車站','')).filter(s => s);
+        function sortStations(rev) {
+            const el = document.getElementById('stnInput');
+            let names = el.value.split(',').map(s => s.trim().replace('車站','')).filter(s => s);
             names.sort((a, b) => {
                 let idxA = MASTER_ORDER.indexOf(a);
                 let idxB = MASTER_ORDER.indexOf(b);
-                return reverse ? idxB - idxA : idxA - idxB;
+                return rev ? idxB - idxA : idxA - idxB;
             });
-            input.value = names.join(', ');
+            el.value = names.join(', ');
         }
 
         function convert() {
-            if (!trainData) return alert("請先上傳 JSON！");
-            const inputNames = document.getElementById('stnInput').value.split(',').map(s => s.trim()).filter(s => s);
-            const targetCodes = inputNames.map(n => STN_DB[n] || n);
-            const firstStnCode = targetCodes[0];
+            if (!trainData) return alert("請先載入 JSON！");
+            
+            const sortBaseName = document.getElementById('sortStation').value.trim().replace('車站','');
+            const sortBaseCode = STN_DB[sortBaseName];
+            if (!sortBaseCode) return alert("排序車站名稱不正確！");
 
-            let list = trainData.TrainInfos.filter(t => t.TimeInfos.some(ti => targetCodes.includes(ti.Station)));
+            const inputNames = document.getElementById('stnInput').value.split(',').map(s => s.trim().replace('車站','')).filter(s => s);
+            const codes = inputNames.map(n => STN_DB[n] || n);
 
-            // 【核心修正】：嚴格排序邏輯
+            // 1. 過濾出有停靠顯示站或基準站的車次
+            let list = trainData.TrainInfos.filter(t => t.TimeInfos.some(ti => codes.includes(ti.Station) || ti.Station === sortBaseCode));
+
+            // 2. 嚴格依照「基準站」的時間排序 00-24
             list.sort((a, b) => {
-                const timeA = a.TimeInfos.find(s => s.Station === firstStnCode)?.DEPTime || "99:99";
-                const timeB = b.TimeInfos.find(s => s.Station === firstStnCode)?.DEPTime || "99:99";
+                const timeA = a.TimeInfos.find(s => s.Station === sortBaseCode)?.DEPTime || "99:99";
+                const timeB = b.TimeInfos.find(s => s.Station === sortBaseCode)?.DEPTime || "99:99";
                 return timeA.localeCompare(timeB);
             });
 
-            let html = `<table><thead><tr><th>車次</th><th>車別</th><th>經由</th><th>起站</th><th>終站</th>`;
-            inputNames.forEach(n => html += `<th class="stn-header">${n}</th>`);
-            html += `<th>備註</th></tr></thead><tbody>`;
+            // 3. 繪製
+            let h = `<table><thead><tr><th>車次</th><th>車別</th><th>經由</th><th>起站</th><th>終站</th>`;
+            inputNames.forEach(n => h += `<th class="stn-header">${n}</th>`);
+            h += `<th>備註</th></tr></thead><tbody>`;
 
             list.forEach(t => {
                 const sCode = t.TimeInfos[0].Station;
                 const eCode = t.TimeInfos[t.TimeInfos.length - 1].Station;
-                html += `<tr><td>${t.Train}</td><td>${CAR_MAP[t.CarClass] || t.CarClass}</td><td>${LINE_MAP[t.Line] || ""}</td>
-                    <td>${CODE_TO_NAME[sCode] || sCode}</td><td>${CODE_TO_NAME[eCode] || eCode}</td>`;
-                targetCodes.forEach(c => {
+                h += `<tr><td style="font-weight:bold;">${t.Train}</td><td>${CAR_MAP[t.CarClass] || t.CarClass}</td><td>${LINE_MAP[t.Line] || ""}</td>
+                      <td>${CODE_TO_NAME[sCode] || sCode}</td><td>${CODE_TO_NAME[eCode] || eCode}</td>`;
+                codes.forEach(c => {
                     const stop = t.TimeInfos.find(si => si.Station === c);
-                    html += `<td>${stop ? '<span class="time-dep">' + stop.DEPTime.substring(0,5) + '</span>' : ""}</td>`;
+                    h += `<td>${stop ? '<span class="time-dep">' + stop.DEPTime.substring(0,5) + '</span>' : ""}</td>`;
                 });
-                html += `<td style="text-align:left; font-size:11px;">${t.Note || ""}</td></tr>`;
+                h += `<td style="text-align:left; font-size:11px; color:#666;">${t.Note || ""}</td></tr>`;
             });
-            document.getElementById('output').innerHTML = html + "</tbody></table>";
+            document.getElementById('output').innerHTML = h + "</tbody></table>";
         }
     </script>
 </body>
