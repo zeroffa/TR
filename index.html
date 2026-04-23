@@ -3,115 +3,106 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>台鐵自定義時刻表產生器</title>
+    <title>台鐵自定義聯合時刻表</title>
     <style>
-        :root { --tra-blue: #003366; --tra-red: #d32f2f; }
-        body { font-family: "Microsoft JhengHei", sans-serif; background: #f0f2f5; margin: 0; padding: 20px; }
-        .container { max-width: 900px; margin: auto; background: white; padding: 25px; border-radius: 15px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); }
-        h1 { color: var(--tra-blue); text-align: center; border-bottom: 3px solid var(--tra-blue); padding-bottom: 10px; }
-        .upload-zone { background: #eef2f7; border: 2px dashed #003366; padding: 20px; border-radius: 10px; text-align: center; margin-bottom: 20px; }
-        .query-zone { display: flex; gap: 10px; justify-content: center; margin-bottom: 30px; }
-        input[type="text"] { padding: 12px; border: 2px solid #ddd; border-radius: 8px; width: 200px; font-size: 16px; }
-        button { padding: 12px 25px; background: var(--tra-blue); color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; transition: 0.3s; }
-        button:hover { opacity: 0.8; transform: translateY(-2px); }
-        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-        th { background: var(--tra-blue); color: white; padding: 15px; text-align: left; }
-        td { padding: 15px; border-bottom: 1px solid #eee; }
-        tr:hover { background: #f9f9f9; }
-        .time { font-family: 'Courier New', Courier, monospace; color: var(--tra-red); font-weight: bold; font-size: 1.2em; }
-        .tag { display: inline-block; padding: 3px 8px; border-radius: 5px; font-size: 12px; margin-right: 5px; color: white; font-weight: bold; }
-        .tag-b { background: #e91e63; } .tag-w { background: #2196f3; }
-        .tag-bk { background: #4caf50; } .tag-f { background: #ff9800; }
+        :root { --tra-main: #003366; --tra-accent: #d32f2f; --bg: #f5f7fa; }
+        body { font-family: "Microsoft JhengHei", "PingFang TC", sans-serif; background: var(--bg); margin: 0; padding: 20px; }
+        .card { max-width: 1100px; margin: auto; background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 25px rgba(0,0,0,0.1); }
+        h1 { color: var(--tra-main); text-align: center; border-bottom: 2px solid #eee; padding-bottom: 15px; margin-top: 0; }
+        
+        /* 控制區 */
+        .controls { background: #fdfdfd; border: 1px solid #e1e4e8; padding: 20px; border-radius: 8px; margin-bottom: 20px; }
+        .input-group { display: flex; gap: 15px; margin-bottom: 15px; align-items: center; flex-wrap: wrap; }
+        input[type="text"], input[type="file"] { padding: 10px; border: 1px solid #ccc; border-radius: 5px; flex: 1; min-width: 200px; }
+        button { padding: 10px 25px; background: var(--tra-main); color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; transition: 0.2s; }
+        button:hover { background: #004080; }
+        
+        /* 表格樣式 - 依據圖片優化 */
+        .table-wrapper { overflow-x: auto; margin-top: 10px; }
+        table { width: 100%; border-collapse: collapse; min-width: 800px; }
+        th { background: var(--tra-main); color: white; padding: 12px 8px; border: 1px solid #fff; font-size: 15px; }
+        td { padding: 12px 8px; border: 1px solid #e1e4e8; text-align: center; font-size: 14px; }
+        .stn-header { background: #eef2f7; color: var(--tra-main); font-weight: bold; }
+        
+        /* 數值樣式 */
         .train-no { font-weight: bold; color: #333; }
-        #status { text-align: center; color: #666; font-size: 14px; margin-top: 10px; }
+        .time-dep { font-family: "Courier New", monospace; color: var(--tra-accent); font-weight: bold; font-size: 1.15em; }
+        .empty-time { color: #ccc; font-size: 12px; }
+        
+        /* 標籤樣式 */
+        .tag { display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 11px; color: white; font-weight: bold; margin: 1px; }
+        .tag-breast { background: #ff4081; } .tag-wheel { background: #2196f3; }
+        .tag-bike { background: #4caf50; } .tag-food { background: #ff9800; }
+        
+        .footer { text-align: center; color: #888; font-size: 12px; margin-top: 20px; }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>台鐵時刻表產生器</h1>
+    <div class="card">
+        <h1>台鐵自定義聯合時刻表</h1>
         
-        <div class="upload-zone">
-            <p><strong>第一步：載入資料</strong></p>
-            <input type="file" id="fileInput" accept=".json">
-            <div id="status">未載入資料 (請上傳 20260621.json 或其他時刻表)</div>
+        <div class="controls">
+            <div class="input-group">
+                <strong>1. 載入 JSON：</strong>
+                <input type="file" id="jsonFile" accept=".json">
+            </div>
+            <div class="input-group">
+                <strong>2. 設定站點：</strong>
+                <input type="text" id="stnCodes" placeholder="輸入代碼 (例如: 1000,1020,1040,1080)">
+                <button onclick="generate()">產生表格</button>
+            </div>
+            <div style="font-size: 12px; color: #666;">* 輸入多個代碼時請以英文逗號分隔，表格將依據第一個站點時間排序。</div>
         </div>
 
-        <div class="query-zone">
-            <input type="text" id="stnCode" placeholder="輸入車站代碼 (如: 1000)">
-            <button onclick="runQuery()">產生客製時刻表</button>
-        </div>
-
-        <div id="tableOut"></div>
+        <div id="view" class="table-wrapper"></div>
+        <div class="footer">本工具支援離線使用，資料完全在瀏覽器端處理。</div>
     </div>
 
     <script>
-        let jsonData = null;
-        const carMap = {"110G":"自強(3000)","1101":"太魯閣","1131":"區間車","1132":"區間快","1110":"莒光"};
+        let db = null;
+        const clsMap = { "110G":"自強(3000)","110H":"自強(3000)","1101":"太魯閣","1131":"區間","1132":"區間快","1103":"自強" };
 
-        // 讀取檔案
-        document.getElementById('fileInput').addEventListener('change', function(e) {
-            const file = e.target.files[0];
-            const reader = new FileReader();
-            reader.onload = function(event) {
-                try {
-                    jsonData = JSON.parse(event.target.result);
-                    document.getElementById('status').innerHTML = `✅ 已成功載入：${file.name}`;
-                    document.getElementById('status').style.color = "green";
-                } catch(err) {
-                    alert("JSON 格式有誤");
-                }
-            };
-            reader.readAsText(file);
-        });
+        document.getElementById('jsonFile').onchange = e => {
+            const r = new FileReader();
+            r.onload = ev => { db = JSON.parse(ev.target.result); alert("資料讀取成功！"); };
+            r.readAsText(e.target.files[0]);
+        };
 
-        function runQuery() {
-            if (!jsonData) return alert("請先上傳 JSON 檔案！");
-            const code = document.getElementById('stnCode').value.trim();
-            if (!code) return alert("請輸入車站代碼");
+        function generate() {
+            if (!db) return alert("請先選擇 JSON 檔案");
+            const stns = document.getElementById('stnCodes').value.split(',').map(s => s.trim()).filter(s => s);
+            if (stns.length === 0) return alert("請輸入至少一個車站代碼");
 
-            const trains = jsonData.TrainInfos || [];
-            const results = [];
-
-            trains.forEach(t => {
-                const stop = t.TimeInfos.find(s => s.Station === code);
-                if (stop) {
-                    results.push({
-                        no: t.Train,
-                        type: carMap[t.CarClass] || t.CarClass,
-                        arr: stop.ARRTime,
-                        info: (t.LineDir === "1" ? "順" : "逆") + (t.Line === "1" ? "(山)" : t.Line === "2" ? "(海)" : ""),
-                        svc: { b: t.BreastFeed==="Y", w: t.Cripple==="Y", bk: t.Bike==="Y", f: t.FoodSrv==="Y" },
-                        note: t.Note || ""
-                    });
-                }
+            const list = (db.TrainInfos || db[0]?.TrainInfos || []).filter(t => t.TimeInfos.some(s => stns.includes(s.Station)));
+            
+            // 排序：以第一個輸入的車站發車時間排序
+            list.sort((a, b) => {
+                const ta = a.TimeInfos.find(x => x.Station === stns[0])?.DEPTime || "99:99";
+                const tb = b.TimeInfos.find(x => x.Station === stns[0])?.DEPTime || "99:99";
+                return ta.localeCompare(tb);
             });
 
-            results.sort((a, b) => a.arr.localeCompare(b.arr));
-            render(results, code);
+            render(list, stns);
         }
 
-        function render(data, code) {
-            const out = document.getElementById('tableOut');
-            if (data.length === 0) {
-                out.innerHTML = `<p style="text-align:center; color:red;">找不到代碼 ${code} 的資料</p>`;
-                return;
-            }
+        function render(data, stns) {
+            let h = `<table><thead><tr><th>車次</th><th>車種</th>`;
+            stns.forEach(s => h += `<th class="stn-header">${s}<br>發車</th>`);
+            h += `<th>服務項目</th><th>備註</th></tr></thead><tbody>`;
 
-            let h = `<table><thead><tr><th>時間</th><th>車次</th><th>車種</th><th>服務</th><th>備註</th></tr></thead><tbody>`;
-            data.forEach(d => {
-                let tags = (d.svc.b?'<span class="tag tag-b">哺</span>':'') +
-                           (d.svc.w?'<span class="tag tag-w">輪</span>':'') +
-                           (d.svc.bk?'<span class="tag tag-bk">腳</span>':'') +
-                           (d.svc.f?'<span class="tag tag-f">訂</span>':'');
-                h += `<tr>
-                    <td class="time">${d.arr.substring(0,5)}</td>
-                    <td class="train-no">${d.no}</td>
-                    <td>${d.type}<br><small>${d.info}</small></td>
-                    <td>${tags}</td>
-                    <td style="font-size:12px; color:#666;">${d.note}</td>
-                </tr>`;
+            data.forEach(t => {
+                h += `<tr><td class="train-no">${t.Train}</td><td><small>${clsMap[t.CarClass] || t.CarClass}</small></td>`;
+                stns.forEach(s => {
+                    const stop = t.TimeInfos.find(si => si.Station === s);
+                    h += stop ? `<td class="time-dep">${stop.DEPTime.substring(0,5)}</td>` : `<td class="empty-time">--:--</td>`;
+                });
+                let svc = (t.BreastFeed==='Y'?'<span class="tag tag-breast">哺</span>':'') +
+                          (t.Cripple==='Y'?'<span class="tag tag-wheel">輪</span>':'') +
+                          (t.Bike==='Y'?'<span class="tag tag-bike">腳</span>':'') +
+                          (t.FoodSrv==='Y'?'<span class="tag tag-food">訂</span>':'');
+                h += `<td>${svc}</td><td><small>${t.Note || ""}</small></td></tr>`;
             });
-            out.innerHTML = h + `</tbody></table>`;
+            document.getElementById('view').innerHTML = h + "</tbody></table>";
         }
     </script>
 </body>
