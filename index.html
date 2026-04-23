@@ -2,41 +2,27 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <title>台鐵 24H 時刻表產生器</title>
+    <title>台鐵時刻表自定義轉換器 (縱向版)</title>
     <style>
-        :root { --tra-blue: #003366; --tra-red: #d32f2f; }
-        body { font-family: "Microsoft JhengHei", sans-serif; background: #f0f2f5; padding: 20px; }
-        .container { max-width: 1000px; margin: auto; background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); }
-        h1 { color: var(--tra-blue); text-align: center; border-bottom: 3px solid var(--tra-blue); padding-bottom: 10px; }
-        
-        /* 操作區 */
+        body { font-family: "Microsoft JhengHei", sans-serif; background: #f0f2f5; padding: 20px; margin: 0; }
+        .container { max-width: 1400px; margin: auto; background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); }
+        h1 { color: #003366; text-align: center; }
         .config-box { background: #eef2f7; padding: 20px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #d1d9e6; }
-        .row { display: flex; gap: 15px; align-items: center; margin-bottom: 10px; }
+        .row { display: flex; gap: 10px; align-items: center; margin-bottom: 15px; flex-wrap: wrap; }
         input[type="text"], input[type="file"] { padding: 10px; border: 1px solid #ccc; border-radius: 5px; flex: 1; }
-        button { padding: 10px 25px; background: var(--tra-blue); color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; }
-        button:hover { background: #004080; }
-
-        /* 表格樣式 */
-        table { width: 100%; border-collapse: collapse; margin-top: 15px; background: white; }
-        th { background: var(--tra-blue); color: white; padding: 12px; border: 1px solid #ddd; position: sticky; top: 0; }
-        td { padding: 12px; border: 1px solid #ddd; text-align: center; font-size: 15px; }
+        button { padding: 10px 25px; background: #003366; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; }
+        
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 13px; }
+        th { background: #003366; color: white; padding: 10px 5px; border: 1px solid #ddd; white-space: nowrap; }
+        td { padding: 10px 5px; border: 1px solid #ddd; text-align: center; }
         tr:nth-child(even) { background: #f9f9f9; }
-        
-        /* 數值醒目化 */
-        .time-dep { color: var(--tra-red); font-weight: bold; font-family: 'Courier New', monospace; font-size: 1.2em; }
-        .train-no { font-weight: bold; color: #333; }
-        
-        /* 服務標籤 */
-        .tag { display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 11px; color: white; font-weight: bold; margin: 1px; }
-        .tag-b { background: #ff4081; } .tag-w { background: #2196f3; }
-        .tag-bk { background: #4caf50; } .tag-f { background: #ff9800; }
-        
-        #info-text { text-align: center; color: #666; font-size: 14px; margin-top: 10px; }
+        .time { color: #d32f2f; font-weight: bold; font-family: monospace; }
+        .stn-header { background: #d9e2ec; color: #003366; font-weight: bold; }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>台鐵車站全日時刻表</h1>
+        <h1>台鐵時刻表自定義轉換器</h1>
         
         <div class="config-box">
             <div class="row">
@@ -44,95 +30,74 @@
                 <input type="file" id="jsonFile" accept=".json">
             </div>
             <div class="row">
-                <strong>2. 輸入車站名稱或代碼：</strong>
-                <input type="text" id="stnInput" placeholder="例如: 1000 或 台北">
-                <button onclick="process()">產生 24H 時刻表</button>
+                <strong>2. 設定站點代碼 (由左至右)：</strong>
+                <input type="text" id="stnCodes" value="3300, 3360, 3390" placeholder="例如: 1210,1250,3300">
             </div>
-            <div id="info-text">支援車站代碼查詢，會自動依照發車時間 (DEPTime) 由早到晚排序</div>
+            <div class="row">
+                <strong>3. 設定站點名稱 (顯示用)：</strong>
+                <input type="text" id="stnNames" value="田中, 彰化, 台中" placeholder="例如: 台北, 桃園, 台中">
+                <button onclick="transform()">執行轉換</button>
+            </div>
+            <small style="color: #666;">* 提示：請依照你想要看到的車站順序輸入代碼與名稱，順序必須對應。</small>
         </div>
 
-        <div id="result"></div>
+        <div id="output" style="overflow-x: auto;"></div>
     </div>
 
     <script>
-        let trainDb = null;
-        // 根據手冊 V1.6 定義常見車型
-        const carMap = { 
-            "110G":"自強(3000)","110H":"自強(3000)","1101":"太魯閣","1102":"普悠瑪",
-            "1131":"區間車","1132":"區間快","1110":"莒光號","1103":"自強號" 
-        };
-
+        let db = null;
+        const lineMap = { "0": "", "1": "山", "2": "海", "3": "成追" };
+        
         document.getElementById('jsonFile').onchange = e => {
-            const reader = new FileReader();
-            reader.onload = ev => {
-                trainDb = JSON.parse(ev.target.result);
-                alert("JSON 資料載入完成！");
-            };
-            reader.readAsText(e.target.files[0]);
+            const r = new FileReader();
+            r.onload = ev => { db = JSON.parse(ev.target.result); alert("資料已載入"); };
+            r.readAsText(e.target.files[0]);
         };
 
-        function process() {
-            if (!trainDb) return alert("請先上傳 JSON 檔案！");
-            const target = document.getElementById('stnInput').value.trim();
-            if (!target) return alert("請輸入車站代碼");
+        function transform() {
+            if (!db) return alert("請先載入 JSON");
+            const codes = document.getElementById('stnCodes').value.split(',').map(s => s.trim());
+            const names = document.getElementById('stnNames').value.split(',').map(s => s.trim());
+            
+            const trains = db.TrainInfos || [];
+            
+            let h = `<table><thead><tr>
+                <th>車次</th><th>車別</th><th>經由</th><th>起站</th><th>終站</th>`;
+            
+            names.forEach(n => h += `<th class="stn-header">${n}</th>`);
+            h += `<th>備註</th></tr></thead><tbody>`;
 
-            const trains = trainDb.TrainInfos || [];
-            let list = [];
+            // 依照第一站的時間排序
+            trains.sort((a, b) => {
+                const tA = a.TimeInfos.find(s => s.Station === codes[0])?.DEPTime || "99:99";
+                const tB = b.TimeInfos.find(s => s.Station === codes[0])?.DEPTime || "99:99";
+                return tA.localeCompare(tB);
+            });
 
             trains.forEach(t => {
-                const stop = t.TimeInfos.find(s => s.Station === target);
-                if (stop) {
-                    list.push({
-                        time: stop.DEPTime, // 抓取出發時間
-                        no: t.Train,
-                        cls: carMap[t.CarClass] || t.CarClass,
-                        svc: { b: t.BreastFeed==='Y', w: t.Cripple==='Y', bk: t.Bike==='Y', f: t.FoodSrv==='Y' },
-                        note: t.Note || ""
-                    });
-                }
+                // 檢查是否停靠這串站點中的任何一站
+                const hasStop = t.TimeInfos.some(si => codes.includes(si.Station));
+                if (!hasStop) return;
+
+                const startStn = t.TimeInfos[0].Station;
+                const endStn = t.TimeInfos[t.TimeInfos.length - 1].Station;
+
+                h += `<tr>
+                    <td><b>${t.Train}</b></td>
+                    <td>${t.CarClass}</td>
+                    <td>${lineMap[t.Line] || ""}</td>
+                    <td>${startStn}</td>
+                    <td>${endStn}</td>`;
+                
+                codes.forEach(c => {
+                    const stop = t.TimeInfos.find(si => si.Station === c);
+                    h += `<td class="time">${stop ? stop.DEPTime.substring(0,5) : ""}</td>`;
+                });
+
+                h += `<td style="text-align:left; font-size:11px;">${t.Note || ""}</td></tr>`;
             });
 
-            // 關鍵：依照 DEPTime 進行 24 小時排序
-            list.sort((a, b) => a.time.localeCompare(b.time));
-
-            render(list, target);
-        }
-
-        function render(data, stn) {
-            const area = document.getElementById('result');
-            if (data.length === 0) {
-                area.innerHTML = `<p style="text-align:center; color:red;">找不到 "${stn}" 車站的時刻資料</p>`;
-                return;
-            }
-
-            let html = `<h3>${stn} 車站 - 當日全車次時刻表 (共 ${data.length} 班)</h3>
-            <table>
-                <thead>
-                    <tr>
-                        <th>發車時間 (DEP)</th>
-                        <th>車次</th>
-                        <th>車種</th>
-                        <th>服務項目</th>
-                        <th>備註</th>
-                    </tr>
-                </thead>
-                <tbody>`;
-
-            data.forEach(d => {
-                let tags = (d.svc.b?'<span class="tag tag-b">哺</span>':'') +
-                           (d.svc.w?'<span class="tag tag-w">輪</span>':'') +
-                           (d.svc.bk?'<span class="tag tag-bk">腳</span>':'') +
-                           (d.svc.f?'<span class="tag tag-f">訂</span>':'');
-
-                html += `<tr>
-                    <td class="time-dep">${d.time.substring(0,5)}</td>
-                    <td class="train-no">${d.no}</td>
-                    <td>${d.cls}</td>
-                    <td>${tags}</td>
-                    <td style="text-align:left; font-size:12px; color:#666;">${d.note}</td>
-                </tr>`;
-            });
-            area.innerHTML = html + "</tbody></table>";
+            document.getElementById('output').innerHTML = h + "</tbody></table>";
         }
     </script>
 </body>
